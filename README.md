@@ -1,117 +1,67 @@
-# Search Typeahead System
+# HLD101 Assignment: Search Typeahead
 
-A distributed search typeahead (autocomplete) system built with Python (FastAPI), SQLite, Redis, and React. Suggests popular search queries as the user types, with sub-millisecond latency.
+Hey, this is my submission for the Search Typeahead assignment for HLD101. I built a full-stack typeahead system using React for the frontend and FastAPI for the backend. It's designed to suggest search queries as you type, and it handles caching, trending searches, and batch database writes.
 
-## Architecture
+## How it works (Architecture)
 
-```
-┌─────────────┐      GET /suggest       ┌──────────────────────────┐
-│   React UI  │ ──────────────────────► │     FastAPI Backend      │
-│  (Vite)     │ ◄────────────────────── │                          │
-│             │      POST /search       │  ┌──────────────────┐   │
-└─────────────┘                         │  │  In-Memory Trie  │   │
-                                        │  │  (prefix index)  │   │
-                                        │  └────────┬─────────┘   │
-                                        │           │              │
-                                        │  ┌────────▼─────────┐   │
-                                        │  │ Consistent Hash  │   │
-                                        │  │     Ring         │   │
-                                        │  └──┬─────┬─────┬───┘   │
-                                        └─────┼─────┼─────┼───────┘
-                                              │     │     │
-                                        ┌─────▼┐ ┌──▼──┐ ┌▼─────┐
-                                        │Redis │ │Redis│ │Redis │
-                                        │:6379 │ │:6380│ │:6381 │
-                                        └──────┘ └─────┘ └──────┘
-                                              │     │     │
-                                        ┌─────▼─────▼─────▼──────┐
-                                        │    SQLite Database      │
-                                        │  (durable primary store)│
-                                        └─────────────────────────┘
-```
+I used a React frontend that talks to a Python FastAPI backend.
+Instead of querying a database for every letter typed, the backend loads all the words into an in-memory **Trie** (Prefix Tree) when it starts up. This makes finding suggestions crazy fast.
 
-## Components
+For caching, I set up 3 Redis nodes running in Docker. The backend uses a **Consistent Hashing Ring** to figure out which Redis node should cache which prefix. This way, if we add or remove a node, it doesn't break the whole cache.
 
-| Component | File | Purpose |
-|---|---|---|
-| **Data Ingestion** | `backend/ingest.py` | Parses `count_1w.txt` (333k words) into SQLite |
-| **Database** | `backend/database.py` | SQLite schema and connection management |
-| **Trie Index** | `backend/trie.py` | In-memory prefix tree for O(prefix) lookups |
-| **Cache Layer** | `backend/cache.py` | Consistent hashing ring with 150 virtual nodes per Redis instance |
-| **Batch Writer** | `backend/batch_writer.py` | Async queue + 5-second flush cycle for search submissions |
-| **API Server** | `backend/main.py` | FastAPI server with all endpoints |
-| **Frontend** | `frontend/src/App.tsx` | React UI with debounced typeahead |
+When you submit a search, it doesn't write to the SQLite database right away (which would cause a bottleneck). Instead, an async batch writer queues up the queries and flushes them to the DB every 5 seconds in one single transaction.
 
-## API Endpoints
+## Setup Instructions
 
-| Method | Path | Purpose |
-|---|---|---|
-| `GET` | `/suggest?q=<prefix>` | Returns top 10 suggestions sorted by blended score |
-| `POST` | `/search` | Submits a search query (batched writes) |
-| `GET` | `/cache/debug?prefix=<x>` | Shows which Redis node owns the prefix (HIT/MISS) |
-| `GET` | `/health` | Health check with word count |
-
-## Setup & Run
-
-### Prerequisites
+### What you need:
 - Python 3.11+
 - Node.js 18+
-- Docker (for Redis)
+- Docker (to run the Redis nodes)
 
-### 1. Start Redis Cache Nodes
+### Step 1: Start the Redis cache
 ```bash
 docker-compose up -d
 ```
 
-### 2. Ingest Dataset
+### Step 2: Load the dataset
+Make sure `count_1w.txt` is in the `data/raw/` folder. Then run the ingest script:
 ```bash
 cd backend
 python -m venv venv
-source venv/bin/activate   # or .\venv\Scripts\activate on Windows
+source venv/bin/activate  # Or .\venv\Scripts\activate on Windows
 pip install -r requirements.txt
 python ingest.py
 ```
 
-### 3. Start Backend
+### Step 3: Start the Backend
 ```bash
 cd backend
 source venv/bin/activate
 uvicorn main:app --port 8000
 ```
 
-### 4. Start Frontend
+### Step 4: Start the Frontend
 ```bash
 cd frontend
 npm install
 npm run dev
 ```
+Then just open `http://localhost:5173` in your browser.
 
-Open **http://localhost:5173** in your browser.
+## API Endpoints
+
+- `GET /suggest?q=<prefix>`: Returns the top 10 suggestions for whatever you're typing.
+- `POST /search`: Submits a search (queues it for the batch writer).
+- `GET /cache/debug?prefix=<x>`: A debugging endpoint to check which Redis node is caching a specific prefix.
+- `GET /health`: Health check that also returns the total number of words loaded in the Trie.
 
 ## Design Choices & Trade-offs
 
-### Why Trie over sorted array + binary search?
-A sorted array finds the start position in O(log N), but still needs to walk forward to collect all prefix matches. A Trie walks directly to the prefix node in O(|prefix|) and collects only the relevant subtree — optimal for typeahead where we need ALL words matching a prefix.
-
-### Why Consistent Hashing over modular hashing?
-With modular hashing (`key % N`), adding or removing a node remaps nearly ALL keys, causing a massive cache stampede. Consistent hashing maps keys and nodes onto a ring — when a node is added/removed, only ~1/N of keys get remapped.
-
-### Why Batch Writes?
-Writing to SQLite on every search request would bottleneck the server (SQLite is single-writer). Instead, searches are queued in memory and flushed every 5 seconds in a single transaction. Trade-off: if the server crashes, up to 5 seconds of search data is lost — acceptable for frequency analytics (eventual consistency).
-
-### Trending Ranking Formula
-```
-score = α * log(total_count + 1) + β * recency_score
-```
-- `α = 1.0`: weight for historical popularity (log-scaled to prevent domination)
-- `β = 0.5`: weight for recent activity (exponentially decayed over 24h)
-- Decay: `weight(hour_i) = e^(-0.173 * i)` — halves every ~4 hours
-
-This ensures historically popular words stay relevant while recent spikes get a temporary boost.
-
-### Cache Invalidation
-When the batch writer flushes new search data and updates the Trie, the updated suggestions will be served on the next cache miss (after the 60-second TTL expires). For an assignment scope, this staleness window is acceptable.
+- **Trie vs Binary Search**: I went with a Trie because it's way faster to grab all words matching a prefix compared to doing a binary search and then linearly scanning an array. The downside is that the Trie uses more memory.
+- **Consistent Hashing**: Used this for the Redis cache so that we don't have a massive cache miss storm if a node goes down, which would happen if I just used normal modulo hashing.
+- **Batch Writes**: SQLite is single-writer, so writing on every search request would kill performance. Batching every 5 seconds solves this. The trade-off is if the server crashes, we lose up to 5 seconds of analytics data, but for trending searches, that's fine.
+- **Trending Searches**: I used a formula that combines all-time popularity (using a log function so it doesn't dominate) and recent popularity (using an exponential decay so older searches lose weight).
 
 ## Dataset
 
-**Google Web Corpus (count_1w.txt)** — 333,333 English word unigrams with frequency counts from Google's web crawl data. Each line contains a word and its occurrence count, tab-separated.
+I used the **Google Web Corpus (`count_1w.txt`)**. It has about 333,333 English words with their frequencies.
