@@ -1,0 +1,19 @@
+# Python
+__pycache__/
+*.pyc
+backend/venv/
+
+# Node / Frontend
+node_modules/
+dist/
+
+# Data (keep raw dataset, exclude generated DB)
+data/database.db
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db

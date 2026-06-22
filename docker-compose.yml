@@ -1,0 +1,26 @@
+# Docker Compose for 3 independent Redis cache nodes.
+#
+# These simulate a distributed cache cluster. Each node runs on a
+# different port (6379, 6380, 6381) and the backend's consistent
+# hashing ring routes prefixes to the correct node.
+#
+# Usage:
+#   docker-compose up -d      # start all 3 nodes
+#   docker-compose down       # stop all 3 nodes
+#   docker ps                 # verify they're running
+
+services:
+  redis-1:
+    image: redis:alpine
+    ports:
+      - "6379:6379"
+
+  redis-2:
+    image: redis:alpine
+    ports:
+      - "6380:6379"
+
+  redis-3:
+    image: redis:alpine
+    ports:
+      - "6381:6379"
