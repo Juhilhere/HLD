@@ -13,39 +13,12 @@ When you submit a search, it doesn't write to the SQLite database right away (wh
 
 ## Setup Instructions
 
-### What you need:
-- Python 3.11+
-- Node.js 18+
-- Docker (to run the Redis nodes)
-
-### Step 1: Start the Redis cache
+Make sure you have Docker installed. Then just run:
 ```bash
-docker-compose up -d
+docker-compose up -d --build
 ```
+This will automatically build and start the React frontend, FastAPI backend, and all 3 Redis cache nodes at once!
 
-### Step 2: Load the dataset
-Make sure `count_1w.txt` is in the `data/raw/` folder. Then run the ingest script:
-```bash
-cd backend
-python -m venv venv
-source venv/bin/activate  # Or .\venv\Scripts\activate on Windows
-pip install -r requirements.txt
-python ingest.py
-```
-
-### Step 3: Start the Backend
-```bash
-cd backend
-source venv/bin/activate
-uvicorn main:app --port 8000
-```
-
-### Step 4: Start the Frontend
-```bash
-cd frontend
-npm install
-npm run dev
-```
 Then just open `http://localhost:5173` in your browser.
 
 ## API Endpoints

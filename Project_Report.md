@@ -17,11 +17,10 @@ When you submit a search query via POST, it doesn't write to the database immedi
 ### 2. Dataset Source and Loading Instructions
 I used the Google Web Corpus dataset (`count_1w.txt`), which has about 333,333 common English words and their frequencies. 
 
-**How to load it:**
-1. Make sure the `count_1w.txt` file is inside the `data/raw/` folder.
-2. Go into the `backend` folder and activate your virtual environment.
-3. Run `python ingest.py`. 
-This script reads the text file line by line and inserts everything into the SQLite database. It takes a couple of seconds to run. Once it's done, you can start the FastAPI server with `uvicorn main:app` and it will automatically load the data from the DB into the Trie.
+**How to run it:**
+1. Make sure you have Docker installed.
+2. Run `docker-compose up -d --build`. 
+This will automatically build the React app, start the FastAPI server, ingest the dataset, and launch all 3 Redis nodes.
 
 ### 3. API Documentation
 

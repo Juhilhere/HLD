@@ -1,15 +1,35 @@
-# Docker Compose for 3 independent Redis cache nodes.
-#
-# These simulate a distributed cache cluster. Each node runs on a
-# different port (6379, 6380, 6381) and the backend's consistent
-# hashing ring routes prefixes to the correct node.
+# Docker Compose for the Full Search Typeahead Stack
 #
 # Usage:
-#   docker-compose up -d      # start all 3 nodes
-#   docker-compose down       # stop all 3 nodes
-#   docker ps                 # verify they're running
+#   docker-compose up -d --build  # start the whole stack
+#   docker-compose down           # stop the whole stack
 
 services:
+  backend:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    ports:
+      - "8000:8000"
+    environment:
+      # Tell the backend how to find the Redis nodes within the Docker network
+      - REDIS_HOST_1=redis-1
+      - REDIS_HOST_2=redis-2
+      - REDIS_HOST_3=redis-3
+    depends_on:
+      - redis-1
+      - redis-2
+      - redis-3
+
+  frontend:
+    build:
+      context: .
+      dockerfile: frontend/Dockerfile
+    ports:
+      - "5173:5173"
+    depends_on:
+      - backend
+
   redis-1:
     image: redis:alpine
     ports:

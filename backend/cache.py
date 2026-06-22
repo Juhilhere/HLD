@@ -109,10 +109,22 @@ class ConsistentHashingRing:
 # ---------------------------------------------------------------------------
 # Module-level singleton: the cache ring used by the rest of the application.
 # ---------------------------------------------------------------------------
+import os
+
+# Read from environment variables if running in Docker, otherwise fallback to localhost
+REDIS_HOST_1 = os.environ.get("REDIS_HOST_1", "localhost")
+REDIS_HOST_2 = os.environ.get("REDIS_HOST_2", "localhost")
+REDIS_HOST_3 = os.environ.get("REDIS_HOST_3", "localhost")
+
+# If running in Docker (host != localhost), internal port is always 6379 for all containers
+REDIS_PORT_1 = 6379
+REDIS_PORT_2 = 6379 if REDIS_HOST_2 != "localhost" else 6380
+REDIS_PORT_3 = 6379 if REDIS_HOST_3 != "localhost" else 6381
+
 REDIS_NODES = [
-    {"host": "localhost", "port": 6379},
-    {"host": "localhost", "port": 6380},
-    {"host": "localhost", "port": 6381},
+    {"host": REDIS_HOST_1, "port": REDIS_PORT_1},
+    {"host": REDIS_HOST_2, "port": REDIS_PORT_2},
+    {"host": REDIS_HOST_3, "port": REDIS_PORT_3},
 ]
 
 cache_ring = ConsistentHashingRing(REDIS_NODES)
